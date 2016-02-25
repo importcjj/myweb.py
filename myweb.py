@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
 
-
+from __future__ import absolute_import
+from gevent import monkey
+monkey.patch_all()
 from gevent.pywsgi import WSGIServer
 from gevent import local
 import functools
 import types
 import httplib
-import requests
 from collections import defaultdict
-import urlparse
+from functools import partial
+from urlparse import urlparse
 from pprint import pprint
+import requests as grequests
+import urllib
+from http_code import http_status as status_code
+
+urllib.getproxies_environment = lambda: {'_': '_'}
 
 request = local.local()
+HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'CONNECT']
 
-
-class HttpCode(object):
-
-    NOT_FOUND = '404 Not Found'
-    OK = '200 OK'
-
-http = HttpCode
 
 request_fields = [
     ('PATH_INFO', 'url'),
@@ -35,7 +36,7 @@ request_fields = [
 
 class MyWebPy(object):
 
-    def __init__(self, app_name, headers=None):
+    def __init__(self, app_name, headers=None, proxy=None):
         """
         Useage:
 
@@ -46,7 +47,7 @@ class MyWebPy(object):
         """
         self.name = app_name
         # proxy
-        self.proxy = None
+        self.proxy = proxy
         # route map
         self.path_map = {}
         # Resonse Headers
@@ -59,26 +60,27 @@ class MyWebPy(object):
         self.set_request(env)
         if self.debug:
             pprint(env)
-        if self.proxy and request.host != ':'.join([self.host, self.port]):
+        start_response(status_code.NOT_FOUND, self.headers)
+        if self.proxy and request.host != self.hostname:
             return self.proxy(request.url, start_response, None)
         handler = self.path_map.get(request.url, None)
         if not handler:
-            start_response(http.NOT_FOUND, self.headers)
-            return http.NOT_FOUND
-        start_response(http.OK, self.headers)
+            start_response(status_code.NOT_FOUND, self.headers)
+            return status_code.NOT_FOUND
+        start_response(status_code.OK, self.headers)
         return handler()
 
-    def start(self, host='127.0.0.1', port=7777, debug=False, proxy=None):
+    def start(self, host='127.0.0.1', port=7777, debug=False):
         """
         Useage:
 
-        appinstance.start(host='127.0.0.1', port='7777')
+        appinstance.start(host='127.0.0.1', port=7777)
 
         """
         self.host = host
         self.port = port
+        self.hostname = ':'.join([host, str(port)])
         self.debug = debug
-        self.proxy = proxy
         print('Serving on 7777...')
         WSGIServer((host, port), self.application).serve_forever()
 
@@ -108,7 +110,6 @@ class MyWebPy(object):
 
         the mapping relationships is in request_fields.
         """
-        print wsgi_environ['wsgi.input'].read()
         for (r, f) in request_fields:
             setattr(request, f, wsgi_environ.get(r, None))
 
@@ -123,10 +124,14 @@ class Proxy(object):
         'POST': 'do_post',
         'PUT': 'do_put',
         'PATCH': 'do_patch',
-        'DELETE': 'do_delete'
+        'DELETE': 'do_delete',
+        'CONNECT': 'do_connect'
     }
 
-    headers = []
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
+    }
+    drop_headers = ['Transfer-Encoding', 'Set-Cookie', 'Content-Encoding']
 
     def __init__(self, headers=None):
         if headers:
@@ -143,57 +148,77 @@ class Proxy(object):
         do_method = self.methods[method]
         if not do_method:
             raise httplib.METHOD_NOT_ALLOWED
-        return do_method(path, start_response, proxy_url)
+        return getattr(self, do_method)(path, start_response, proxy_url)
 
     def do_get(self, path, start_response, proxy_url):
-        return requests.get(path)
+        response = grequests.get(path, headers=self.headers)
+        headers = [(k, v) for k, v in response.headers.items() if k not in self.drop_headers]
+        request.response = response
+        host = urlparse(path).hostname
 
-    def do_post(self, path, start_response, proxy_url):
-        pass
+        for k, v in self.middleware.items():
+            if k in host:
+                v.handle()
+        start_response(status_code[response.status_code], [])
+        return [request.response.content]
 
-    def do_patch(self, path, start_response, proxy_url):
-        pass
+    def do_post(self, path, start_response, proxy):
+        return 'Not Allowed.'
 
-    def do_put(self, path, start_response, proxy_url):
-        pass
+    def do_patch(self, path, start_response, proxy):
+        return 'Not Allowed'
 
-    def do_delete(self, path, start_response, proxy_url):
-        pass
+    def do_put(self, path, start_response, proxy):
+        return 'Not Allowed.'
 
-    def _decorator(self, method, func, host=None):
-        @functools.wraps(func)
-        def wrapper(response, *args, **kwargs):
-            if method == 'GET':
-                pass
+    def do_delete(self, path, start_response, proxy):
+        return 'Not Allowed.'
 
-    def get(self, host=None):
-        return NotImplementedError
+    def do_connect(self, path, start_response, proxy):
+        return 'Not Allowed.'
 
-    def post(self, path, start_response, proxy_url):
-        raise NotImplementedError
+    def register_handler(self, method, host='*'):
+        def _decorator(func):
+            if host not in self.middleware:
+                self.middleware[host] = ProxyMiddleware(name=host, host=host)
+            getattr(self.middleware[host], method).append(func)
 
-    def patch(self, path, start_response, proxy_url):
-        raise NotImplementedError
+            @functools.wraps(func)
+            def wrapper(response, *args, **kwargs):
+                return func(response, *args, **kwargs)
+            return wrapper
+        return _decorator
 
-    def put(self, path, start_response, proxy_url):
-        raise NotImplementedError
+    def __getattr__(self, k):
+        if k.upper() in self.methods:
+            return partial(self.register_handler, k.upper())
+        return self.__dict__[k]
 
 
 class ProxyMiddleware(object):
 
-    methods = ['get', 'post', 'put', 'patch', 'delete']
+    methods = HTTP_METHODS
 
     def __init__(self, name, host='*'):
         self.name = name
         self.host = host
-        self.handles = defaultdict(list)
+        self.handlers = defaultdict(list)
 
     def add_handler(self, method, handler):
         self.method.append(handler)
 
+    def handle(self, response=None):
+        method = request.method
+        response = response if response else request.response
+        if method not in self.methods:
+            raise httplib.METHOD_NOT_ALLOWED
+        for handler in self.handlers[method]:
+            handler(response)
+        return response
+
     def __getattr__(self, k):
-        if k in self.methods:
-            return self.handles[k]
+        if k.upper() in self.methods:
+            return self.handlers[k]
         return self.__dict__.get(k)
 
 if __name__ == '__main__':
