@@ -17,8 +17,7 @@ def index():
 
 
 @app.proxy.get('*')
-def handler(response):
-    response._content = '''<h1 style="text-align:center">Proxy<h1>'''
+def handler(request, response):
     return response
 
 app.start()

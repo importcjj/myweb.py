@@ -23,12 +23,16 @@ class Request(object):
 
         :param wsgi_env(dict): from gevent wsgi server.
         """
-        self.headers = {h2: env[h1]for h1, h2 in HEADERS.items()}
+        self.headers = {HEADERS[h1]: h2 for h1,
+                        h2 in env.items() if HEADERS.get(h1)}
         self.method = env['REQUEST_METHOD']
         self.scheme = env['wsgi.url_scheme']
         self.host = env['HTTP_HOST']
         self.path = env['PATH_INFO']
-        self.url = self.host + self.path
+        if self.host not in self.path:
+            self.url = self.host + self.path
+        else:
+            self.url = self.path
         self.data = env['wsgi.input'].read()
         self.params = env['QUERY_STRING']
 
@@ -41,11 +45,12 @@ class Request(object):
                            data=self.data,
                            **kwargs)
         except requests.RequestException as ex:
+            raise ex
             raise httplib.HTTPException(ex.response)
         return Response(resp)
 
 
-DROP_HEADERS = ['Content-Encoding']
+DROP_HEADERS = ['Content-Encoding', 'Transfer-Encoding']
 
 
 class Response(object):
@@ -56,6 +61,8 @@ class Response(object):
         :param response(requests.Response): response of requests.
         """
         self._headers = Response.headers
+        for header in DROP_HEADERS:
+            self._headers.pop(header, None)
         self.content = Response.content
         self.status_code = Response.status_code
 
@@ -63,7 +70,7 @@ class Response(object):
     def headers(self):
         """Get Headers."""
         self._headers['Content-Length'] = len(self.content)
-        return self._headers
+        return [(k, v) for k, v in self._headers.items() if k]
 
     @headers.setter
     def headers(self, h):

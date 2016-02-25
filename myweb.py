@@ -15,23 +15,15 @@ from pprint import pprint
 import requests as grequests
 import urllib
 from http_code import http_status as status_code
+from http import (
+    Request,
+    Response
+)
 
 urllib.getproxies_environment = lambda: {'_': '_'}
 
-request = local.local()
+this = local.local()
 HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'CONNECT']
-
-
-request_fields = [
-    ('PATH_INFO', 'url'),
-    ('HTTP_HOST', 'host'),
-    ('QUERY_STRING', 'params'),
-    ('REMOTE_ADDR', 'remote_addr'),
-    ('REMOTE_PORT', 'remote_port'),
-    ('REQUEST_METHOD', 'method'),
-    ('HTTP_USER_AGENT', 'agent')
-
-]
 
 
 class MyWebPy(object):
@@ -57,17 +49,17 @@ class MyWebPy(object):
 
     def application(self, env, start_response):
         # TODO: support more code
-        self.set_request(env)
-        if self.debug:
-            pprint(env)
-        print env['wsgi.input'].read()
-        start_response(status_code.NOT_FOUND, self.headers)
-        if self.proxy and request.host != self.hostname:
-            return self.proxy(request.url, start_response, None)
-        handler = self.path_map.get(request.url, None)
+        this.request = Request(env)
+        if self.proxy and this.request.host != self.hostname:
+            resp = self.proxy(this.request)
+            start_response(status_code[resp.status_code], resp.headers)
+            return [resp.content]
+
+        handler = self.path_map.get(this.request.path, None)
         if not handler:
             start_response(status_code.NOT_FOUND, self.headers)
             return status_code.NOT_FOUND
+
         start_response(status_code.OK, self.headers)
         return handler()
 
@@ -104,16 +96,6 @@ class MyWebPy(object):
             return wrapper
         return decorator
 
-    def set_request(self, wsgi_environ):
-        """rewrite the request info in wsgi environ to the greenlet local variable `request`.
-
-        method = request.method
-
-        the mapping relationships is in request_fields.
-        """
-        for (r, f) in request_fields:
-            setattr(request, f, wsgi_environ.get(r, None))
-
     def __str__(self):
         return '<MyWebPy.Application %s>' % self.name
 
@@ -129,54 +111,24 @@ class Proxy(object):
         'CONNECT': 'do_connect'
     }
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
-    }
-    drop_headers = ['Transfer-Encoding', 'Set-Cookie', 'Content-Encoding', 'Content-Length']
-
-    def __init__(self, headers=None):
-        if headers:
-            self.headers = headers
+    def __init__(self):
         self.middleware = {
             '*': ProxyMiddleware('common')
         }
 
-    def __call__(self, path, start_response, proxy_url):
-        if '://' not in path:
-            path = 'http://' + path
+    def __call__(self, request):
+        if '://' not in request.url:
+            request.url = 'http://' + request.url
 
-        method = request.method
-        do_method = self.methods[method]
-        if not do_method:
-            raise httplib.METHOD_NOT_ALLOWED
-        return getattr(self, do_method)(path, start_response, proxy_url)
+        return self.handle(request)
 
-    def do_get(self, path, start_response, proxy_url):
-        response = grequests.get(path, headers=self.headers)
-        headers = [(k, v) for k, v in response.headers.items() if k not in self.drop_headers]
-        host = urlparse(path).hostname
-
-        response = self.middleware['*'].handle(response)
+    def handle(self, request):
+        response = request.send()
+        response = self.middleware['*'].handle(request, response)
         for k, v in self.middleware.items():
-            if k in host:
-                response = v.handle(response)
-        start_response(status_code[response.status_code], headers)
-        return [response.content]
-
-    def do_post(self, path, start_response, proxy):
-        return 'Not Allowed.'
-
-    def do_patch(self, path, start_response, proxy):
-        return 'Not Allowed'
-
-    def do_put(self, path, start_response, proxy):
-        return 'Not Allowed.'
-
-    def do_delete(self, path, start_response, proxy):
-        return 'Not Allowed.'
-
-    def do_connect(self, path, start_response, proxy):
-        return 'Not Allowed.'
+            if k in request.host:
+                response = v.handle(request, response)
+        return response
 
     def register_handler(self, method, host='*'):
         def _decorator(func):
@@ -185,8 +137,8 @@ class Proxy(object):
             getattr(self.middleware[host], method).append(func)
 
             @functools.wraps(func)
-            def wrapper(response, *args, **kwargs):
-                return func(response, *args, **kwargs)
+            def wrapper(request, response, *args, **kwargs):
+                return func(request, response, *args, **kwargs)
             return wrapper
         return _decorator
 
@@ -208,12 +160,9 @@ class ProxyMiddleware(object):
     def add_handler(self, method, handler):
         self.method.append(handler)
 
-    def handle(self, response):
-        method = request.method
-        if method not in self.methods:
-            raise httplib.METHOD_NOT_ALLOWED
-        for handler in self.handlers[method]:
-            response = handler(response)
+    def handle(self, request, response):
+        for handler in self.handlers[request.method]:
+            response = handler(request, response)
         return response
 
     def __getattr__(self, k):
@@ -228,5 +177,5 @@ if __name__ == '__main__':
     @app.route('/')
     @app.route('/index')
     def index():
-        return '%s %s ...' % (request.method, request.url)
+        return '%s %s ...' % (this.request.method, this.request.url)
     app.start(debug=True)
