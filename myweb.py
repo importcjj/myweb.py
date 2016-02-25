@@ -60,6 +60,7 @@ class MyWebPy(object):
         self.set_request(env)
         if self.debug:
             pprint(env)
+        print env['wsgi.input'].read()
         start_response(status_code.NOT_FOUND, self.headers)
         if self.proxy and request.host != self.hostname:
             return self.proxy(request.url, start_response, None)
