@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import requests
 from requests.api import request
+import httplib
 
 HEADERS = {
     'HTTP_ACCEPT': 'Accept',
@@ -36,11 +38,14 @@ class Request(object):
 
     def done(self, **kwargs):
         """Send a Request."""
-        resp = request(self.method, self.url,
-                       headers=self.headers,
-                       params=self.params,
-                       data=self.data,
-                       **kwargs)
+        try:
+            resp = request(self.method, self.url,
+                           headers=self.headers,
+                           params=self.params,
+                           data=self.data,
+                           **kwargs)
+        except requests.RequestException as ex:
+            raise httplib.HTTPException(ex.response)
         return Response(resp)
 
 
