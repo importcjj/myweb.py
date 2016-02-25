@@ -29,12 +29,8 @@ class Request(object):
         self.host = env['HTTP_HOST']
         self.path = env['PATH_INFO']
         self.url = self.host + self.path
-        self._input = env['wsgi.input']
+        self.data = env['wsgi.input'].read()
         self.params = env['QUERY_STRING']
-
-    @property
-    def data(self):
-        return self._input.read()
 
     def done(self, **kwargs):
         """Send a Request."""
