@@ -131,7 +131,7 @@ class Proxy(object):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
     }
-    drop_headers = ['Transfer-Encoding', 'Set-Cookie', 'Content-Encoding']
+    drop_headers = ['Transfer-Encoding', 'Set-Cookie', 'Content-Encoding', 'Content-Length']
 
     def __init__(self, headers=None):
         if headers:
@@ -153,14 +153,14 @@ class Proxy(object):
     def do_get(self, path, start_response, proxy_url):
         response = grequests.get(path, headers=self.headers)
         headers = [(k, v) for k, v in response.headers.items() if k not in self.drop_headers]
-        request.response = response
         host = urlparse(path).hostname
 
+        response = self.middleware['*'].handle(response)
         for k, v in self.middleware.items():
             if k in host:
-                v.handle()
-        start_response(status_code[response.status_code], [])
-        return [request.response.content]
+                response = v.handle(response)
+        start_response(status_code[response.status_code], headers)
+        return [response.content]
 
     def do_post(self, path, start_response, proxy):
         return 'Not Allowed.'
@@ -207,13 +207,12 @@ class ProxyMiddleware(object):
     def add_handler(self, method, handler):
         self.method.append(handler)
 
-    def handle(self, response=None):
+    def handle(self, response):
         method = request.method
-        response = response if response else request.response
         if method not in self.methods:
             raise httplib.METHOD_NOT_ALLOWED
         for handler in self.handlers[method]:
-            handler(response)
+            response = handler(response)
         return response
 
     def __getattr__(self, k):
