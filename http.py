@@ -32,7 +32,7 @@ class Request(object):
         self.data = env['wsgi.input'].read()
         self.params = env['QUERY_STRING']
 
-    def done(self, **kwargs):
+    def send(self, **kwargs):
         """Send a Request."""
         try:
             resp = request(self.method, self.url,
