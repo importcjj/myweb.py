@@ -5,6 +5,8 @@ from myweb import (
     Proxy
 )
 
+import time
+
 
 proxy = Proxy()
 app = MyWebPy(__name__, proxy=proxy)
@@ -16,8 +18,9 @@ def index():
     return "hello world"
 
 
-@app.proxy.get('*')
+@app.proxy.get(host='runoob.com')
 def handler(request, response):
+    time.sleep(20)
     return response
 
 app.start()

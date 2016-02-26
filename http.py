@@ -36,6 +36,8 @@ class Request(object):
         self.data = env['wsgi.input'].read()
         self.params = env['QUERY_STRING']
 
+        self.allow_redirects = False
+
     def send(self, **kwargs):
         """Send a Request."""
         try:
@@ -43,10 +45,10 @@ class Request(object):
                            headers=self.headers,
                            params=self.params,
                            data=self.data,
+                           allow_redirects=self.allow_redirects,
                            **kwargs)
         except requests.RequestException as ex:
             raise ex
-            raise httplib.HTTPException(ex.response)
         return Response(resp)
 
 

@@ -7,18 +7,12 @@ from gevent.pywsgi import WSGIServer
 from gevent import local
 import functools
 import types
-import httplib
 from collections import defaultdict
 from functools import partial
-from urlparse import urlparse
-from pprint import pprint
-import requests as grequests
 import urllib
 from http_code import http_status as status_code
-from http import (
-    Request,
-    Response
-)
+from http import Request
+
 
 urllib.getproxies_environment = lambda: {'_': '_'}
 
@@ -48,7 +42,6 @@ class MyWebPy(object):
         self.headers = headers if headers else []
 
     def application(self, env, start_response):
-        # TODO: support more code
         this.request = Request(env)
         if self.proxy and this.request.host != self.hostname:
             resp = self.proxy(this.request)
@@ -102,14 +95,7 @@ class MyWebPy(object):
 
 class Proxy(object):
 
-    methods = {
-        'GET': 'do_get',
-        'POST': 'do_post',
-        'PUT': 'do_put',
-        'PATCH': 'do_patch',
-        'DELETE': 'do_delete',
-        'CONNECT': 'do_connect'
-    }
+    methods = HTTP_METHODS
 
     def __init__(self):
         self.middleware = {
