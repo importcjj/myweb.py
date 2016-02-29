@@ -2,14 +2,15 @@
 
 from __future__ import absolute_import
 from gevent import monkey
-monkey.patch_all()
-from gevent.pywsgi import WSGIServer
+monkey.patch_all()  # noqa
 from gevent import local
+from gevent.pywsgi import WSGIServer
+
+import urllib
 import functools
 import types
 from collections import defaultdict
 from functools import partial
-import urllib
 from http_code import http_status as status_code
 from http import Request
 

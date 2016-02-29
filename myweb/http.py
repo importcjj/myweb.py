@@ -2,7 +2,6 @@
 
 import requests
 from requests.api import request
-import httplib
 
 HEADERS = {
     'HTTP_ACCEPT': 'Accept',
@@ -21,7 +20,7 @@ class Request(object):
     def __init__(self, env):
         """Request object for myweb.
 
-        :param wsgi_env(dict): from gevent wsgi server.
+        :param wsgi_env: (dict). From gevent wsgi server.
         """
         self.headers = {HEADERS[h1]: h2 for h1,
                         h2 in env.items() if HEADERS.get(h1)}
@@ -57,16 +56,16 @@ DROP_HEADERS = ['Content-Encoding', 'Transfer-Encoding']
 
 class Response(object):
 
-    def __init__(self, Response):
+    def __init__(self, response):
         """Response object for myweb.
 
-        :param response(requests.Response): response of requests.
+        :param response: (requests.Response). Response of requests.
         """
-        self._headers = Response.headers
+        self._headers = response.headers
         for header in DROP_HEADERS:
             self._headers.pop(header, None)
-        self.content = Response.content
-        self.status_code = Response.status_code
+        self.content = response.content
+        self.status_code = response.status_code
 
     @property
     def headers(self):
@@ -78,7 +77,7 @@ class Response(object):
     def headers(self, h):
         """Set Headers.
 
-        :param h(dict): new headers dict.
+        :param h: (dict). New headers dict.
 
         .. warning::
             some header key-value will be droped.
