@@ -11,8 +11,8 @@ import functools
 import types
 from collections import defaultdict
 from functools import partial
-from http_code import http_status as status_code
-from http import Request
+from .http_code import http_status as status_code
+from .http import Request
 
 
 urllib.getproxies_environment = lambda: {'_': '_'}
@@ -46,7 +46,7 @@ class MyWebPy(object):
         this.request = Request(env)
         if self.proxy and this.request.host != self.hostname:
             resp = self.proxy(this.request)
-            start_response(status_code[resp.status_code], resp.headers)
+            start_response(status_code[resp.status_code], resp.wsgi_headers())
             return [resp.content]
 
         handler = self.path_map.get(this.request.path, None)

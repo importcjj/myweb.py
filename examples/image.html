@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Zoo upload</title>
+    <style type="text/css">
+    body {
+        margin: 0;
+        width: 300px;
+        /*background-image: url(desktop.jpg);*/
+    }
+    
+    div#image-box {
+        position: relative;
+        top: 110px;
+    }
+    
+    div.img-card {
+        box-shadow: 3px 3px 3px #999;
+        display: inline-block;
+        margin: 10px;
+        background: rgb(255, 255, 255);
+    }
+    
+    .img-card img {
+        border: 1px solid #d6d6d6;
+        max-width: 200px;
+        max-height: 180px;
+        margin: 0;
+    }
+    
+    form#index-upload {
+        width: 100%;
+        height: 100px;
+        border: 5px solid rgb(0, 0, 0);
+        background: rgb(251, 236, 63);
+        border-radius: 4px;
+        position: fixed;
+        -webkit-border-image: url(border.png) 30 30 round;
+        -o-border-image: url(border.png) 30 30 round;
+        border-image: url(border.png) 30 30 round;
+        box-sizing: border-box;
+    }
+    
+    input.index-select-btn {
+        opacity: 0;
+    }
+    
+    #index-upload-bg-before-tip {
+        height: 50px;
+        color: rgb(0, 0, 0);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        margin-top: -25px;
+        margin-left: -112px;
+    }
+    </style>
+</head>
+
+<body>
+    <form id="index-upload">
+        <input class="index-select-btn" type="file" multiple="true" onchange="dropHandler(this.files)">
+        <h1 id="index-upload-bg-before-tip">将图片拖拽至此</h1>
+    </form>
+    <script>
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+    var DropBox = $('index-upload');
+    //拖进
+    DropBox.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        console.log('dragenter');
+    }, false);
+    //拖出
+    DropBox.addEventListener('dragleave', function(e) {
+
+    }, false);
+    //拖来拖去
+    //如果没有这个'drop'会有问题
+    DropBox.addEventListener('dragover', function(e) {　
+        e.preventDefault();
+        //debug
+        console.log('dragover');
+    }, false);
+    //放下
+    DropBox.addEventListener('drop', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        var files = e.target.files || e.dataTransfer.files;
+        dropHandler(files);
+    }, false);
+
+    var imageFiles = [];
+
+    function dropHandler(files) {
+        current = imageFiles.length - 1;
+        for (var i = 0; i < files.length; i++) {
+            //no limit to file type
+            imageFiles.push(files[i]);
+        };
+        for (var i = current + 1; i < imageFiles.length; i++) {
+            var image = imageFiles[i];
+            image.ID = i;
+            viewImage(image);
+        };
+        console.log(imageFiles);
+    };
+
+    function viewImage(image) {
+        if (window.webkitURL) {
+            var src = window.webkitURL.createObjectURL(image);
+        } else if (window.URL) {
+            var src = window.URL.createObjectURL(image);
+        } else {
+            var render = new FileRender();
+            render.onload = function(file) {
+                return file.target.result;
+            }
+            var src = render.readAsDataURL(image);
+        }
+        //debug
+        console.log(src);
+        var html = '';
+        html += '<div class="img-card">'
+        html += '<img src="' + src + '">'
+        html += '<p>ID#' + image.ID + '</p>'
+        html += '</div>'
+        $('image-box').innerHTML = html + $('image-box').innerHTML;
+    };
+    </script>
+</body>
+
+</html>
